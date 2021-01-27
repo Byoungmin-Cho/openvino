@@ -42,17 +42,17 @@ struct scatter_elements_update : public primitive_base<scatter_elements_update> 
 
     /// @brief Constructs scatter_elements_update primitive.
     /// @param id This primitive id.
-    /// @param dict Input dictionary primitive id.
+    /// @param dict Input data primitive id.
     /// @param idx Input indexes primitive id.
     /// @param idupd Input updates primitive id.
     /// @param axis Gathering axis.
     scatter_elements_update(const primitive_id& id,
-                   const primitive_id& dict,
+                   const primitive_id& data,
                    const primitive_id& idx,
                    const primitive_id& idupd,
                    const scatter_elements_update_axis axis,
                    const padding& output_padding = padding())
-        : primitive_base(id, {dict, idx, idupd}, output_padding), axis(axis) {}
+        : primitive_base(id, {data, idx, idupd}, output_padding), axis(axis) {}
 
     /// @brief ScatterUpdate axis
     scatter_elements_update_axis axis;

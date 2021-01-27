@@ -31,26 +31,27 @@ using namespace ::tests;
 
 TEST(scatter_elements_update_gpu_fp16, d2411_axisB) {
     //  Dictionary : 2x4x1x1
-    //  Indexes : 2x1x1x1
-    //  Updates : 2x4x1x1
-    //  Axis : 0
+    //  Indexes : 2x2x1x1
+    //  Updates : 2x2x1x1
+    //  Axis : 1
     //  Output : 2x4x1x1
     //  Input values in fp16
-
-    //  Indexes:
-    //  1.f, 0.f
     //
-    //  Updates:
-    //  1.f, 7.f, 2.f, 9.f,
-    //  3.f, 6.f, 5.f, 4.f
-    //
-    //  Dictionary:
-    //  0.f, 0.f, 0.f, 0.f,
-    //  0.f, 0.f, 0.f, 0.f
-    //
-    //  Output:
+    //  Input:
     //  3.f, 6.f, 5.f, 4.f, 
     //  1.f, 7.f, 2.f, 9.f
+    //
+    //  Indexes:
+    //  0.f, 1.f
+    //  2.f, 3.f
+    //
+    //  Updates:
+    //  10.f, 11.f,
+    //  12.f, 13.f
+    //
+    //  Output:
+    //  10.f, 11.f, 5.f, 4.f, 
+    //  1.f, 7.f, 12.f, 13.f
 
     engine_configuration config {
         false,
@@ -60,58 +61,54 @@ TEST(scatter_elements_update_gpu_fp16, d2411_axisB) {
         std::string(),
         true,
         std::string(),
-        std::string("C:/work/cl_dump/"),
+        std::string("C:/work/openvino/bin/"),
     };
     engine engine(config);
 
     auto input1 = memory::allocate(engine, { data_types::f16, format::bfyx, { 2, 4, 1, 1 } }); // Dictionary
-    auto input2 = memory::allocate(engine, { data_types::f32, format::bfyx, { 2, 1, 1, 1 } }); // Indexes
-    auto input3 = memory::allocate(engine, { data_types::f16, format::bfyx, { 2, 4, 1, 1 } }); // Updates
-    auto axis = cldnn::scatter_elements_update::scatter_elements_update_axis::along_b;
-
+    auto input2 = memory::allocate(engine, { data_types::f16, format::bfyx, { 2, 2, 1, 1 } }); // Indexes
+    auto input3 = memory::allocate(engine, { data_types::f16, format::bfyx, { 2, 2, 1, 1 } }); // Updates
+    auto axis = cldnn::scatter_elements_update::scatter_elements_update_axis::along_f;
     set_values(input1, {
-        FLOAT16(0.0f), FLOAT16(0.0f), FLOAT16(0.0f), FLOAT16(0.0f),
-        FLOAT16(0.0f), FLOAT16(0.0f), FLOAT16(0.0f), FLOAT16(0.0f)
+        FLOAT16(3.0f), FLOAT16(6.0f), FLOAT16(5.0f), FLOAT16(4.0f),
+        FLOAT16(1.0f), FLOAT16(7.0f), FLOAT16(2.0f), FLOAT16(9.0f)
     });
-
     set_values(input2, {
-        1.f, 0.f
+        FLOAT16(0.0f), FLOAT16(1.0f),
+        FLOAT16(2.0f), FLOAT16(3.0f)
     });
-
     set_values(input3, {
-        FLOAT16(1.0f), FLOAT16(7.0f), FLOAT16(2.0f), FLOAT16(9.0f),
-        FLOAT16(3.0f), FLOAT16(6.0f), FLOAT16(5.0f), FLOAT16(4.0f)
+        FLOAT16(10.0f), FLOAT16(11.0f),
+        FLOAT16(12.0f), FLOAT16(13.0f)
     });
-
     topology topology;
-    topology.add(input_layout("InputDictionary", input1.get_layout()));
-    topology.add(input_layout("InputText", input2.get_layout()));
+    topology.add(input_layout("InputData", input1.get_layout()));
+    topology.add(input_layout("InputIndices", input2.get_layout()));
     topology.add(input_layout("InputUpdates", input3.get_layout()));
     topology.add(
-        scatter_elements_update("scatter_elements_update", "InputDictionary", "InputText", "InputUpdates", axis)
+        scatter_elements_update("scatter_elements_update", "InputData", "InputIndices", "InputUpdates", axis)
     );
     
     network network(engine, topology); 
     
     
-    network.set_input_data("InputDictionary", input1);
-    network.set_input_data("InputText", input2);
+    network.set_input_data("InputData", input1);
+    network.set_input_data("InputIndices", input2);
     network.set_input_data("InputUpdates", input3);
     
     auto outputs = network.execute();
     
-
     auto output = outputs.at("scatter_elements_update").get_memory();
     auto output_ptr = output.pointer<uint16_t>();
 
     std::vector<float> expected_results = {
-        3.f, 6.f, 5.f, 4.f, 
-        1.f, 7.f, 2.f, 9.f
+        10.f, 11.f, 5.f, 4.f, 
+        1.f, 7.f, 12.f, 13.f
     };
 
     for (size_t i = 0; i < expected_results.size(); ++i) {
         EXPECT_EQ(expected_results[i], float16_to_float32(output_ptr[i]));
-    }    
+    }
 }
 
 // TEST(scatter_elements_update_gpu_fp32, d8111_axisB) {
@@ -272,7 +269,7 @@ TEST(scatter_elements_update_gpu_fp16, d2411_axisB) {
 //     } 
 // }
 
-// TEST(scatter_update_gpu_fp16, d2521_axisF) {
+// TEST(scatter_elements_update_gpu_fp16, d2521_axisF) {
 //     //  Dictionary : 2x5x2x1
 //     //  Indexes : 2x2x1x1
 //     //  Updates : 2x2x2x2
@@ -322,13 +319,22 @@ TEST(scatter_elements_update_gpu_fp16, d2411_axisB) {
 //     //  121.f, 131.f,
 //     //  16.f, 17.f,
 //     //  141.f, 151.f
-
-//     engine engine;
+//     engine_configuration config {
+//         false,
+//         false,
+//         false,
+//         std::string(),
+//         std::string(),
+//         true,
+//         std::string(),
+//         std::string("C:/work/openvino/bin/"),
+//     };
+//     engine engine(config);
 
 //     auto input1 = memory::allocate(engine, { data_types::f16, format::bfyx, { 2, 5, 1, 2 } }); // Dictionary
 //     auto input2 = memory::allocate(engine, { data_types::f32, format::bfyx, { 2, 2, 1, 1 } }); // Indexes
 //     auto input3 = memory::allocate(engine, { data_types::f16, format::bfyx, { 2, 2, 2, 2 } }); // Updates
-//     auto axis = cldnn::scatter_update::scatter_update_axis::along_f;
+//     auto axis = cldnn::scatter_elements_update::scatter_elements_update_axis::along_f;
 
 //     set_values(input1, {
 //         FLOAT16(0.0f), FLOAT16(1.0f), 
@@ -366,7 +372,7 @@ TEST(scatter_elements_update_gpu_fp16, d2411_axisB) {
 //     topology.add(input_layout("InputText", input2.get_layout()));
 //     topology.add(input_layout("InputUpdates", input3.get_layout()));
 //     topology.add(
-//         scatter_update("scatter_update", "InputDictionary", "InputText", "InputUpdates", axis)
+//         scatter_elements_update("scatter_elements_update", "InputDictionary", "InputText", "InputUpdates", axis)
 //     );
     
 //     network network(engine, topology); 
@@ -377,7 +383,7 @@ TEST(scatter_elements_update_gpu_fp16, d2411_axisB) {
     
 //     auto outputs = network.execute();
 
-//     auto output = outputs.at("scatter_update").get_memory();
+//     auto output = outputs.at("scatter_elements_update").get_memory();
 //     auto output_ptr = output.pointer<uint16_t>();
 
 //     std::vector<float> expected_results = {

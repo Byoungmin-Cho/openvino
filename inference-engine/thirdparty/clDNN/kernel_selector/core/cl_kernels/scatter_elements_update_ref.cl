@@ -15,7 +15,7 @@
 
 #include "include/include_all.cl"
 
-#define GET_UPDATES_INDEX(prefix, idx_order) CAT(prefix, _GET_INDEX)(idx_order)
+#define GET_INDEX(prefix, idx_order) CAT(prefix, _GET_INDEX)(idx_order)
 #define GET_OUTPUT_INDEX(idx_order) OUTPUT_GET_INDEX(idx_order)
 #if OUTPUT_DIMS == 4
     #define ORDER b,f,y,x
@@ -25,7 +25,7 @@
     #define ORDER b,f,w,z,y,x
 #endif
 
-KERNEL(scatter_update_ref)(const __global INPUT0_TYPE* dictionary,
+KERNEL(scatter_elements_update_ref)(const __global INPUT0_TYPE* data,
                    const __global INPUT1_TYPE* indices,
                    const __global INPUT2_TYPE* updates, 
                    __global OUTPUT_TYPE* output
@@ -39,6 +39,7 @@ KERNEL(scatter_update_ref)(const __global INPUT0_TYPE* dictionary,
     const uint dim2 = get_global_id(2);
 
 #ifndef IS_SECOND_ITER // First kernel
+
     #if OUTPUT_DIMS == 4
         const uint x = dim0;
         const uint y = dim1;
@@ -58,9 +59,10 @@ KERNEL(scatter_update_ref)(const __global INPUT0_TYPE* dictionary,
         const uint f = dim2 % OUTPUT_FEATURE_NUM;
         const uint b = dim2 / OUTPUT_FEATURE_NUM;
     #endif
-    
+
     const uint output_idx = GET_OUTPUT_INDEX(ORDER);
-    INPUT0_TYPE val = dictionary[output_idx];
+    INPUT0_TYPE val = data[output_idx];
+
     #if HAS_FUSED_OPS
         FUSED_OPS_FIRST_KERNEL;
         output[output_idx] = TO_OUTPUT_TYPE(FUSED_OPS_RESULT_FIRST_KERNEL);
@@ -72,65 +74,25 @@ KERNEL(scatter_update_ref)(const __global INPUT0_TYPE* dictionary,
     #if OUTPUT_DIMS == 4
         const uint x = dim0;
         const uint y = dim1;
-        #if AXIS_VALUE == 0
-            const uint f = dim2 % OUTPUT_FEATURE_NUM;
-            const uint b = dim2 / OUTPUT_FEATURE_NUM;
-        #else
-            const uint f = dim2 / OUTPUT_BATCH_NUM;
-            const uint b = dim2 % OUTPUT_BATCH_NUM;
-        #endif
+        const uint f = dim2 % INPUT2_FEATURE_NUM;
+        const uint b = dim2 / INPUT2_FEATURE_NUM;
     #elif OUTPUT_DIMS == 5
+        const uint x = dim0 % INPUT2_SIZE_X;
+        const uint y = dim0 / INPUT2_SIZE_X;
         const uint z = dim1;
-        #if AXIS_VALUE == 1
-            const uint f = dim2 / OUTPUT_BATCH_NUM;
-            const uint b = dim2 % OUTPUT_BATCH_NUM;
-            const uint x = dim0 % OUTPUT_SIZE_X;
-            const uint y = dim0 / OUTPUT_SIZE_X;
-        #elif AXIS_VALUE == 4
-            const uint f = dim2 % OUTPUT_FEATURE_NUM;
-            const uint b = dim2 / OUTPUT_FEATURE_NUM;
-            const uint x = dim0 / OUTPUT_SIZE_Y;
-            const uint y = dim0 % OUTPUT_SIZE_Y;
-        #else
-            const uint f = dim2 % OUTPUT_FEATURE_NUM;
-            const uint b = dim2 / OUTPUT_FEATURE_NUM;
-            const uint x = dim0 % OUTPUT_SIZE_X;
-            const uint y = dim0 / OUTPUT_SIZE_X;
-        #endif
+        const uint f = dim2 % INPUT2_FEATURE_NUM;
+        const uint b = dim2 / INPUT2_FEATURE_NUM;
     #elif OUTPUT_DIMS == 6
-        #if AXIS_VALUE == 1
-            const uint f = dim2 / OUTPUT_BATCH_NUM;
-            const uint b = dim2 % OUTPUT_BATCH_NUM;
-            const uint x = dim0 % OUTPUT_SIZE_X;
-            const uint y = dim0 / OUTPUT_SIZE_X;
-            const uint z = dim1 % OUTPUT_SIZE_Z;
-            const uint w = dim1 / OUTPUT_SIZE_Z;
-        #elif AXIS_VALUE == 3
-            const uint f = dim2 % OUTPUT_FEATURE_NUM;
-            const uint b = dim2 / OUTPUT_FEATURE_NUM;
-            const uint x = dim0 % OUTPUT_SIZE_X;
-            const uint y = dim0 / OUTPUT_SIZE_X;
-            const uint z = dim1 / OUTPUT_SIZE_W;
-            const uint w = dim1 % OUTPUT_SIZE_W;
-        #elif AXIS_VALUE == 5
-            const uint f = dim2 % OUTPUT_FEATURE_NUM;
-            const uint b = dim2 / OUTPUT_FEATURE_NUM;
-            const uint x = dim0 / OUTPUT_SIZE_Y;
-            const uint y = dim0 % OUTPUT_SIZE_Y;
-            const uint z = dim1 % OUTPUT_SIZE_Z;
-            const uint w = dim1 / OUTPUT_SIZE_Z;
-        #else
-            const uint f = dim2 % OUTPUT_FEATURE_NUM;
-            const uint b = dim2 / OUTPUT_FEATURE_NUM;
-            const uint x = dim0 % OUTPUT_SIZE_X;
-            const uint y = dim0 / OUTPUT_SIZE_X;
-            const uint z = dim1 % OUTPUT_SIZE_Z;
-            const uint w = dim1 / OUTPUT_SIZE_Z;
-        #endif
+        const uint x = dim0 % INPUT2_SIZE_X;
+        const uint y = dim0 / INPUT2_SIZE_X;
+        const uint z = dim1 % INPUT2_SIZE_Z;
+        const uint w = dim1 / INPUT2_SIZE_Z;
+        const uint f = dim2 % INPUT2_FEATURE_NUM;
+        const uint b = dim2 / INPUT2_FEATURE_NUM;
     #endif
 
+    const uint updates_idx = GET_INDEX(INPUT2, ORDER);
     const uint output_idx = GET_OUTPUT_INDEX(SECOND_ITER_OUTPUT_INDEX_ORDER);
-    const uint updates_idx = GET_UPDATES_INDEX(INPUT2, UPDATES_INDEX_ORDER);
 
     INPUT2_TYPE val = updates[updates_idx];
     #if HAS_FUSED_OPS
