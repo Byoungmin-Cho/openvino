@@ -52,17 +52,17 @@ struct scatter_elements_update_gpu : typed_primitive_gpu_impl<scatter_elements_u
 
 public:
     static primitive_impl* create(const scatter_elements_update_node& arg) {
-        auto scatter_update_params = get_default_params<kernel_selector::scatter_elements_update_params>(arg);
-        auto scatter_update_optional_params =
+        auto params = get_default_params<kernel_selector::scatter_elements_update_params>(arg);
+        auto optional_params =
             get_default_optional_params<kernel_selector::scatter_elements_update_optional_params>(arg.get_program());
 
-        scatter_update_params.axis = convert_axis(arg.get_primitive()->axis, arg);
+        params.axis = convert_axis(arg.get_primitive()->axis, arg);
 
-        scatter_update_params.inputs.push_back(convert_data_tensor(arg.input(1).get_output_layout()));
-        scatter_update_params.inputs.push_back(convert_data_tensor(arg.input(2).get_output_layout()));
+        params.inputs.push_back(convert_data_tensor(arg.input(1).get_output_layout()));
+        params.inputs.push_back(convert_data_tensor(arg.input(2).get_output_layout()));
 
         auto& kernel_selector = kernel_selector::scatter_elements_update_kernel_selector::Instance();
-        auto best_kernels = kernel_selector.GetBestKernels(scatter_update_params, scatter_update_optional_params);
+        auto best_kernels = kernel_selector.GetBestKernels(params, optional_params);
 
         CLDNN_ERROR_BOOL(arg.id(),
                          "Best_kernel.empty()",

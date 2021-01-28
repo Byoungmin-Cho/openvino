@@ -60,7 +60,6 @@ layout scatter_elements_update_inst::calc_output_layout(scatter_elements_update_
     const size_t nonempty_indices_dims = GetNonEmptyDimsNumber(node.input(1).get_output_layout());
 
     auto input_layout = node.input(0).get_output_layout();
-    
     auto output_shape = input_layout.size;
     auto input_format = input_layout.format;
     auto output_type = input_layout.data_type;
@@ -75,11 +74,6 @@ layout scatter_elements_update_inst::calc_output_layout(scatter_elements_update_
     if (indices_size > static_cast<size_t>(output_shape.sizes()[axis])) {
         CLDNN_ERROR_MESSAGE(node.id(),
             "Undefined behavior ScatterUpdate: indices size must not be larger than the output size along the Axis.");
-    }
-
-    if (nonempty_indices_dims + static_cast<size_t>(axis) > updates_number_of_dims) {
-        CLDNN_ERROR_MESSAGE(node.id(),
-            "Undefined behavior ScatterUpdate: indices dimention must not be larger than the updates[:Axis] dimentional size.");
     }
 
     return layout{output_type, input_format, output_shape};
