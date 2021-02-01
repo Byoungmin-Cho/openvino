@@ -35,6 +35,7 @@
 #include "api/permute.hpp"
 #include "api/gather.hpp"
 #include "api/scatter_update.hpp"
+#include "api/scatter_elements_update.hpp"
 #include "api/depth_to_space.hpp"
 #include "api/space_to_depth.hpp"
 #include "api/batch_to_space.hpp"
@@ -7208,3 +7209,188 @@ INSTANTIATE_TEST_CASE_P(DISABLED_fusings_gpu,
                             reduce_test_params{CASE_REDUCE_I8_3, 2, 4, reduce_mode::mean, {reduce::along_x}, true, "reduce_ref"},
                             reduce_test_params{CASE_REDUCE_U8_3, 2, 4, reduce_mode::l2, {reduce::along_x}, true, "reduce_ref"}
                         }), );
+
+
+
+/* ----------------------------------------------------------------------------------------------------- */
+/* ------------------------------------------ ScatterElementsUpdate cases --------------------------------------------- */
+/* ----------------------------------------------------------------------------------------------------- */
+
+struct scatter_elements_update_test_params {
+    tensor data_shape;
+    tensor indices_shape;
+    cldnn::scatter_elements_update::scatter_elements_update_axis axis;
+    data_types data_type;
+    format input_format;
+    data_types default_type;
+    format default_format;
+    size_t expected_fused_primitives;
+    size_t expected_not_fused_primitives;
+};
+
+#define CASE_SCATTER_ELEMENTS_UPDATE_FP32_1 {2, 4, 1, 1}, {2, 4, 1, 1}, cldnn::scatter_elements_update::scatter_elements_update_axis::along_b, data_types::f32, format::bfyx, data_types::f32, format::bfyx
+#define CASE_SCATTER_ELEMENTS_UPDATE_FP32_2 {8, 1, 1, 1}, {4, 1, 1, 1}, cldnn::scatter_elements_update::scatter_elements_update_axis::along_b, data_types::f32, format::bfyx, data_types::f32, format::bfyx
+#define CASE_SCATTER_ELEMENTS_UPDATE_FP32_3 {4, 3, 1, 1}, {2, 2, 1, 1}, cldnn::scatter_elements_update::scatter_elements_update_axis::along_b, data_types::f32, format::bfyx, data_types::f32, format::bfyx
+#define CASE_SCATTER_ELEMENTS_UPDATE_FP32_4 {2, 5, 1, 2}, {2, 2, 1, 2}, cldnn::scatter_elements_update::scatter_elements_update_axis::along_f, data_types::f32, format::bfyx, data_types::f32, format::bfyx
+#define CASE_SCATTER_ELEMENTS_UPDATE_FP32_5 {2, 2, 1, 4}, {2, 2, 1, 2}, cldnn::scatter_elements_update::scatter_elements_update_axis::along_y, data_types::f32, format::bfyx, data_types::f32, format::bfyx
+
+#define CASE_SCATTER_ELEMENTS_UPDATE_FP16_1 {2, 4, 1, 1}, {2, 1, 1, 1}, cldnn::scatter_elements_update::scatter_elements_update_axis::along_f, data_types::f16, format::bfyx, data_types::f16, format::bfyx
+#define CASE_SCATTER_ELEMENTS_UPDATE_FP16_2 {8, 2, 1, 20}, {2, 2, 1, 20}, cldnn::scatter_elements_update::scatter_elements_update_axis::along_b, data_types::f16, format::bfyx, data_types::f16, format::bfyx
+#define CASE_SCATTER_ELEMENTS_UPDATE_FP16_3 {2, 2, 4, 1}, {2, 2, 3, 1}, cldnn::scatter_elements_update::scatter_elements_update_axis::along_x, data_types::f16, format::bfyx, data_types::f16, format::bfyx
+#define CASE_SCATTER_ELEMENTS_UPDATE_FP16_4 {6, 2, 1, 1}, {1, 2, 1, 1}, cldnn::scatter_elements_update::scatter_elements_update_axis::along_b, data_types::f16, format::bfyx, data_types::f16, format::bfyx
+#define CASE_SCATTER_ELEMENTS_UPDATE_FP16_5 {3, 1, 1, 5}, {3, 1, 1, 2}, cldnn::scatter_elements_update::scatter_elements_update_axis::along_y, data_types::f16, format::bfyx, data_types::f16, format::bfyx
+
+#define CASE_SCATTER_ELEMENTS_UPDATE_5D_FP32_1 {4, 3, 1, 4, 1}, {4, 3, 1, 4, 1}, cldnn::scatter_elements_update::scatter_elements_update_axis::along_b, data_types::f32, format::bfzyx, data_types::f32, format::bfzyx
+#define CASE_SCATTER_ELEMENTS_UPDATE_5D_FP32_2 {2, 3, 2, 2, 2}, {2, 2, 2, 2, 2}, cldnn::scatter_elements_update::scatter_elements_update_axis::along_f, data_types::f32, format::bfzyx, data_types::f32, format::bfzyx
+#define CASE_SCATTER_ELEMENTS_UPDATE_5D_FP32_3 {5, 3, 2, 4, 2}, {5, 3, 2, 3, 2}, cldnn::scatter_elements_update::scatter_elements_update_axis::along_y, data_types::f32, format::bfzyx, data_types::f32, format::bfzyx
+#define CASE_SCATTER_ELEMENTS_UPDATE_5D_FP32_4 {2, 3, 1, 4, 4}, {2, 3, 1, 4, 2}, cldnn::scatter_elements_update::scatter_elements_update_axis::along_z, data_types::f32, format::bfzyx, data_types::f32, format::bfzyx
+#define CASE_SCATTER_ELEMENTS_UPDATE_5D_FP32_5 {3, 1, 5, 2, 1}, {3, 1, 2, 2, 1}, cldnn::scatter_elements_update::scatter_elements_update_axis::along_x, data_types::f32, format::bfzyx, data_types::f32, format::bfzyx
+
+#define CASE_SCATTER_ELEMENTS_UPDATE_5D_FP16_1 {3, 2, 1, 2, 1}, {2, 2, 1, 2, 1}, cldnn::scatter_elements_update::scatter_elements_update_axis::along_b, data_types::f16, format::bfzyx, data_types::f16, format::bfzyx
+#define CASE_SCATTER_ELEMENTS_UPDATE_5D_FP16_2 {1, 3, 1, 2, 1}, {1, 2, 1, 2, 1}, cldnn::scatter_elements_update::scatter_elements_update_axis::along_f, data_types::f16, format::bfzyx, data_types::f16, format::bfzyx
+#define CASE_SCATTER_ELEMENTS_UPDATE_5D_FP16_3 {2, 3, 1, 3, 3}, {2, 3, 1, 2, 3}, cldnn::scatter_elements_update::scatter_elements_update_axis::along_y, data_types::f16, format::bfzyx, data_types::f16, format::bfzyx
+#define CASE_SCATTER_ELEMENTS_UPDATE_5D_FP16_4 {3, 2, 2, 2, 2}, {3, 2, 2, 2, 2}, cldnn::scatter_elements_update::scatter_elements_update_axis::along_z, data_types::f16, format::bfzyx, data_types::f16, format::bfzyx
+#define CASE_SCATTER_ELEMENTS_UPDATE_5D_FP16_5 {1, 1, 4, 1, 1}, {1, 1, 3, 1, 1}, cldnn::scatter_elements_update::scatter_elements_update_axis::along_x, data_types::f16, format::bfzyx, data_types::f16, format::bfzyx
+
+#include "api/engine.hpp"
+class ScatterElementsUpdatePrimitiveFusingTest : public ::BaseFusingTest<scatter_elements_update_test_params> {
+public:
+
+    ScatterElementsUpdatePrimitiveFusingTest() {
+        cldnn::engine_configuration config(false, false, false, "", "", true, "", "C:/work/cl_dump/");
+        engine = cldnn::engine(config);
+    }
+
+    void execute(scatter_elements_update_test_params& p) {
+        auto input_prim = get_mem(get_input_layout(p));
+        network network_not_fused(this->engine, this->topology_non_fused, bo_not_fused);
+        network network_fused(this->engine, this->topology_fused, bo_fused);
+        network_fused.set_input_data("input", input_prim);
+        network_not_fused.set_input_data("input", input_prim);
+        compare(network_not_fused, network_fused, p);
+    }
+
+    layout get_input_layout(scatter_elements_update_test_params& p) {
+        return layout{ p.data_type, p.input_format, p.data_shape };
+    }
+
+    layout get_indices_layout(scatter_elements_update_test_params& p) {
+        return layout{ p.data_type, format::bfyx, p.indices_shape };
+    }
+
+    layout get_updates_layout(scatter_elements_update_test_params& p) {
+        return layout{ p.data_type, p.input_format, p.indices_shape };
+    }
+
+    size_t get_axis_dim(scatter_elements_update_test_params& p) {
+        switch (p.axis) {
+            case cldnn::scatter_update::scatter_update_axis::along_x:
+                return p.data_shape.spatial[0];
+            case cldnn::scatter_update::scatter_update_axis::along_y:
+                return p.data_shape.spatial[1];
+            case cldnn::scatter_update::scatter_update_axis::along_z:
+                return p.data_shape.spatial[2];
+            case cldnn::scatter_update::scatter_update_axis::along_w:
+                return p.data_shape.spatial[3];
+            case cldnn::scatter_update::scatter_update_axis::along_f:
+                return p.data_shape.feature[0];
+            case cldnn::scatter_update::scatter_update_axis::along_b:
+                return p.data_shape.batch[0];
+            default:
+                return 1;
+        }
+    }
+
+    layout get_per_channel_layout(scatter_elements_update_test_params& p) {
+        return layout{ p.default_type, p.default_format, tensor{1, p.data_shape.feature[0], 1, 1} };
+    }
+};
+
+class scatter_elements_update_quantize : public ScatterElementsUpdatePrimitiveFusingTest {};
+TEST_P(scatter_elements_update_quantize, basic) {
+    auto p = GetParam();
+    create_topologies(input_layout("input", get_input_layout(p)),
+        data("scatter_elements_update_indices", get_mem(get_indices_layout(p), 0, static_cast<int>(get_axis_dim(p)) - 1)),
+        data("scatter_elements_update_updates", get_mem(get_updates_layout(p), 0, 1000)),
+        data("in_lo", get_mem(get_per_channel_layout(p), min_random, 0)),
+        data("in_hi", get_mem(get_per_channel_layout(p), 1, max_random)),
+        data("out_lo", get_mem(get_single_element_layout(p), -127)),
+        data("out_hi", get_mem(get_single_element_layout(p), 127)),
+        scatter_elements_update("scatter_elements_update_prim", "input", "scatter_elements_update_indices", "scatter_elements_update_updates", p.axis),
+        quantize("quantize", "scatter_elements_update_prim", "in_lo", "in_hi", "out_lo", "out_hi", 255, data_types::i8),
+        reorder("reorder_bfyx", "quantize", p.default_format, data_types::f32)
+    );
+    tolerance = 1.f;
+    execute(p);
+};
+
+INSTANTIATE_TEST_CASE_P(fusings_gpu, scatter_elements_update_quantize,
+    ::testing::ValuesIn(std::vector<scatter_elements_update_test_params>{
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_FP32_1, 2, 3 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_FP32_2, 2, 3 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_FP32_3, 2, 3 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_FP32_4, 2, 3 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_FP32_5, 2, 3 },
+
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_FP16_1, 2, 3 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_FP16_2, 2, 3 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_FP16_3, 2, 3 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_FP16_4, 2, 3 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_FP16_5, 2, 3 },
+
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_5D_FP32_1, 2, 3 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_5D_FP32_2, 2, 3 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_5D_FP32_3, 2, 3 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_5D_FP32_4, 2, 3 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_5D_FP32_5, 2, 3 },
+
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_5D_FP16_1, 2, 3 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_5D_FP16_2, 2, 3 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_5D_FP16_3, 2, 3 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_5D_FP16_4, 2, 3 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_5D_FP16_5, 2, 3 },
+}), );
+
+class scatter_elements_update_scale_activation : public ScatterElementsUpdatePrimitiveFusingTest {};
+TEST_P(scatter_elements_update_scale_activation, basic) {
+    auto p = GetParam();
+    create_topologies(input_layout("input", get_input_layout(p)),
+        data("scatter_elements_update_indices", get_mem(get_indices_layout(p), 0, static_cast<int>(get_axis_dim(p)) - 1)),
+        data("scatter_elements_update_updates", get_mem(get_updates_layout(p), 0, 1000)),
+        data("scale_data", get_mem(get_per_channel_layout(p), -10, 10)),
+        scatter_elements_update("scatter_elements_update_prim", "input", "scatter_elements_update_indices", "scatter_elements_update_updates", p.axis),
+        activation("activation", "scatter_elements_update_prim", activation_func::abs),
+        scale("scale", "activation", "scale_data"),
+        reorder("reorder_bfyx", "scale", p.default_format, data_types::f32)
+    );
+    tolerance = 1e-5f;
+    execute(p);
+}
+
+INSTANTIATE_TEST_CASE_P(fusings_gpu, scatter_elements_update_scale_activation,
+    ::testing::ValuesIn(std::vector<scatter_elements_update_test_params>{
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_FP32_1, 2, 4 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_FP32_2, 2, 4 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_FP32_3, 2, 4 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_FP32_4, 2, 4 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_FP32_5, 2, 4 },
+
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_FP16_1, 2, 4 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_FP16_2, 2, 4 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_FP16_3, 2, 4 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_FP16_4, 2, 4 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_FP16_5, 2, 4 },
+
+
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_5D_FP32_1, 2, 4 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_5D_FP32_2, 2, 4 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_5D_FP32_3, 2, 4 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_5D_FP32_4, 2, 4 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_5D_FP32_5, 2, 4 },
+
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_5D_FP16_1, 2, 4 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_5D_FP16_2, 2, 4 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_5D_FP16_3, 2, 4 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_5D_FP16_4, 2, 4 },
+                        scatter_elements_update_test_params{ CASE_SCATTER_ELEMENTS_UPDATE_5D_FP16_5, 2, 4 },
+}), );

@@ -63,6 +63,8 @@ KERNEL(scatter_elements_update_ref)(const __global INPUT0_TYPE* data,
     const uint output_idx = GET_OUTPUT_INDEX(ORDER);
     INPUT0_TYPE val = data[output_idx];
 
+    // printf("b: %d, f: %d, y: %d, x: %d, o: %d\n", b, f, y, x, output_idx);
+
     #if HAS_FUSED_OPS
         FUSED_OPS_FIRST_KERNEL;
         output[output_idx] = TO_OUTPUT_TYPE(FUSED_OPS_RESULT_FIRST_KERNEL);
@@ -93,6 +95,8 @@ KERNEL(scatter_elements_update_ref)(const __global INPUT0_TYPE* data,
 
     const uint updates_idx = GET_INDEX(INPUT2, ORDER);
     const uint output_idx = GET_OUTPUT_INDEX(SECOND_ITER_OUTPUT_INDEX_ORDER);
+
+    // printf("b: %d, f: %d, y: %d, x: %d, u: %d, o: %d\n", b, f, y, x, updates_idx, output_idx);
 
     INPUT2_TYPE val = updates[updates_idx];
     #if HAS_FUSED_OPS

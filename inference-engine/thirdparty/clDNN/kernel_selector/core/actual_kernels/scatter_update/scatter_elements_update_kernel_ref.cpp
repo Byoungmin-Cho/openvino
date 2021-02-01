@@ -117,13 +117,16 @@ CommonDispatchData ScatterElementsUpdateKernelRef::SetDefault(const scatter_elem
 
 static std::vector<std::string> GetVectorSecondOutputIndexOrder(const scatter_elements_update_params& params, size_t axis) {
     std::vector<std::string> default_order = GetDefaultOrder(params.output.GetDims().size());
-    default_order[axis] = "convert_int(indices[GET_INDEX(INPUT1,ORDER)])";
+    // default_order[axis] = "convert_int(indices[GET_INDEX(INPUT1,ORDER)])"; // Why it doesn't work?!
+    default_order[axis] = "convert_int(indices[updates_idx])";
+
     return default_order;
 }
 
 static std::string GetSecondIterOutputIndexOrder(const scatter_elements_update_params& params, size_t axis) {
     std::vector<std::string> default_order = GetDefaultOrder(params.output.GetDims().size());
-    default_order[axis] = "convert_int(indices[GET_INDEX(INPUT1,ORDER)])";
+    // default_order[axis] = "convert_int(indices[GET_INDEX(INPUT1,ORDER)])"; // Why it doesn't work?!
+    default_order[axis] = "convert_int(indices[updates_idx])";
     return GetOrderString(default_order);
 }
 
@@ -175,6 +178,8 @@ KernelsData ScatterElementsUpdateKernelRef::GetKernelsData(const Params& params,
             cldnn_jit.AddConstant(MakeJitConstant("IS_SECOND_ITER", "true"));
         }
         std::string jit = CreateJit(kernelName, cldnn_jit, entry_point);
+
+        // printf("%s\n", jit.c_str());
         
         clKernelData& kernel = kd.kernels[i];
 

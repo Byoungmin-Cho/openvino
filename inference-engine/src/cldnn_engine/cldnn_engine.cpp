@@ -62,7 +62,6 @@
 
 #include <low_precision/transformer.hpp>
 #include <low_precision/mat_mul.hpp>
-#include <low_precision/strided_slice.hpp>
 
 #include "cldnn_engine.h"
 #include "cldnn_executable_network.h"
@@ -287,9 +286,7 @@ InferenceEngine::CNNNetwork clDNNEngine::CloneAndTransformNetwork(const Inferenc
                                                       LayerTransformation::QuantizedTensorAlignment::None,         // quantizedTensorAlignmentOnWeights
                                                       true);                                                       // supportAsymmetricQuantization
             LowPrecisionTransformer transformer(LowPrecisionTransformer::getAllTransformations(params)
-                .add<MatMulTransformation, ngraph::opset1::MatMul>(LayerTransformation::Params(params).setSupportAsymmetricQuantization(false))
-                // INT8 StridedSlice not supported
-                .remove<StridedSliceTransformation, ngraph::opset1::StridedSlice>());
+                .add<MatMulTransformation, ngraph::opset1::MatMul>(LayerTransformation::Params(params).setSupportAsymmetricQuantization(false)));
 
             transformer.transform(nGraphFunc);
         }
@@ -379,6 +376,8 @@ ExecutableNetworkInternal::Ptr clDNNEngine::LoadExeNetworkImpl(const InferenceEn
 
     CLDNNPlugin::Config conf = _impl->m_config;
     UpdateConfig(conf, network, config);
+
+    conf.graph_dumps_dir = "c:/work/openvino/bin/graph_dump/graph";
 
     CLDNNRemoteCLContext::Ptr context;
 
