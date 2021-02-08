@@ -36,6 +36,23 @@ static size_t calc_read_offset(const reduce_params& params) {
     return read_offset;
 }
 
+static bool is_reduce_xy(const reduce_params& params) {
+    auto axes = params.reduceAxes;
+    return axes.size() == 2 && 
+        std::find(axes.begin(), axes.end(), 2) != std::end(axes) &&
+        std::find(axes.begin(), axes.end(), 3) != std::end(axes) &&
+        !(params.reduceMode == ReduceMode::PROD ||
+            params.reduceMode == ReduceMode::SUM_SQUARE ||
+            params.reduceMode == ReduceMode::LOG_SUM);
+}
+
+static NDims calc_input_dims(const reduce_params& params) {
+    auto input = params.inputs[0];
+    auto in_dims = input.GetDims();
+    std::reverse(in_dims.begin(), in_dims.end());
+    return in_dims;
+}
+
 static NDims calc_in_dims(const reduce_params& params) {
     auto input = params.inputs[0];
     auto in_dims = input.GetDims();
@@ -75,10 +92,20 @@ CommonDispatchData ReduceKernel_b_fs_yx_fsv16::SetDefault(const reduce_params& p
     CommonDispatchData dispatchData;
 
     auto in_dims = calc_in_dims(params);
-    dispatchData.gws = { 16,
+
+    if (is_reduce_xy(params)) {
+        auto input_dims = calc_input_dims(params);
+        dispatchData.gws = { 16,
+                            std::min(CeilDiv(input_dims[2].v, SIMD), SIMD),
+                            CeilDiv(in_dims[1].v, SIMD) * in_dims[0].v };                 // F, B
+        dispatchData.lws = { 16, dispatchData.gws[1], 1 };
+    }
+    else {
+        dispatchData.gws = { 16,
                          CeilDiv(in_dims[3].v, calc_read_offset(params)) * in_dims[2].v,  // X, Y
                          CeilDiv(in_dims[1].v, SIMD) * in_dims[0].v };                    // F, B
-    dispatchData.lws = { SIMD, 1, 1 };
+        dispatchData.lws = { SIMD, 1, 1 };
+    }
 
     return dispatchData;
 }
@@ -87,6 +114,18 @@ JitConstants ReduceKernel_b_fs_yx_fsv16::GetJitConstants(const reduce_params& pa
     auto jit = ReduceKernelBase::GetJitConstants(params);
     auto in_dims = calc_in_dims(params);
     auto read_offset = calc_read_offset(params);
+
+    // In case of XY reduction
+    if (is_reduce_xy(params)) {
+        auto input_dims = calc_input_dims(params);
+        auto num_block_y = std::min(CeilDiv(input_dims[2].v, SIMD), SIMD);
+        jit.AddConstant(MakeJitConstant("IS_REDUCE_XY", 1));
+        jit.AddConstant(MakeJitConstant("BLOCK_Y_NUM", num_block_y));
+        jit.AddConstant(MakeJitConstant("BLOCK_Y_SIZE", CeilDiv(input_dims[2].v, num_block_y)));
+    }
+    else {
+        jit.AddConstant(MakeJitConstant("IS_REDUCE_XY", 0));
+    }
 
     // Universal output sizes for keep dims = true/false cases
     jit.AddConstant(MakeJitConstant("COMMON_OUTPUT_SIZE_X", in_dims[3].v));
