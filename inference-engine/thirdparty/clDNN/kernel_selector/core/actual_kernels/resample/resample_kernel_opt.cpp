@@ -28,13 +28,21 @@ size_t ResampleKernelOpt::GetOptimalBlockSize(const resample_params& params) con
     return 1;
 }
 
+size_t ResampleKernelOpt::GetOptimalBlockSize(const size_t val) const {
+    std::vector<size_t> block_width = { 16, 8, 4, 2, 1 };
+    for (auto& w : block_width)
+        if (val % w == 0)
+            return w;
+    return 1;
+}
+
 ParamsKey ResampleKernelOpt::GetSupportedKey() const {
     ParamsKey k;
     k.EnableInputDataType(Datatype::F16);
     k.EnableInputDataType(Datatype::F32);
     k.EnableOutputDataType(Datatype::F16);
     k.EnableOutputDataType(Datatype::F32);
-    k.EnableOutputDataType(Datatype::UINT8);
+    k.EnableOutputDataType(Datatype::UINT8);  
     k.EnableOutputDataType(Datatype::INT8);
     k.EnableInputLayout(DataLayout::b_fs_yx_fsv16);
     k.EnableInputLayout(DataLayout::fs_b_yx_fsv32);
@@ -47,6 +55,7 @@ ParamsKey ResampleKernelOpt::GetSupportedKey() const {
     k.EnableReampleType(ResampleType::BILINEAR_INTERP);
     k.EnableReampleType(ResampleType::NEAREST_NEIGHBOR);
     k.EnableReampleType(ResampleType::LINEAR_ONNX);
+    k.EnableReampleType(ResampleType::CAFFE_BILINEAR_INTERP);
     k.EnableSubGroup();
     k.EnableSubGroupShort();
     return k;
@@ -56,13 +65,41 @@ ResampleKernelBase::DispatchData ResampleKernelOpt::SetDefault(const kernel_sele
     DispatchData dispatchData;
     const auto& out = arg.output;
 
-    dispatchData.gws[0] = CeilDiv(out.X().v, GetOptimalBlockSize(arg)) * out.Y().v;
-    dispatchData.gws[1] = Align(out.Feature().v, sub_group_size);
-    dispatchData.gws[2] = arg.output.Batch().v;
+    if (arg.resampleType == ResampleType::CAFFE_BILINEAR_INTERP) {
+        // dispatchData.gws[0] = Align(out.Feature().v, sub_group_size);
+        // dispatchData.gws[1] = out.X().v * out.Y().v;
+        // dispatchData.gws[2] = arg.output.Batch().v;
 
-    dispatchData.lws[0] = 1;
-    dispatchData.lws[1] = sub_group_size;
-    dispatchData.lws[2] = 1;
+        // dispatchData.lws[0] = sub_group_size;                   // feature
+        // dispatchData.lws[1] = GetOptimalBlockSize(arg);         // xy
+        // dispatchData.lws[2] = 1;
+
+        dispatchData.gws[0] = out.X().v * out.Y().v;
+        dispatchData.gws[1] = CeilDiv(out.Feature().v, GetFeatureBlockSize(arg));
+        dispatchData.gws[2] = arg.output.Batch().v;
+
+        dispatchData.lws[0] = GetOptimalBlockSize(arg);         // xy
+        dispatchData.lws[1] = sub_group_size;                   // feature
+        dispatchData.lws[2] = 1;
+    } else {
+        dispatchData.gws[0] = Align(out.Feature().v, sub_group_size);
+        dispatchData.gws[1] = CeilDiv(out.X().v, GetOptimalBlockSize(arg)) * out.Y().v;
+        dispatchData.gws[2] = arg .output.Batch().v;
+
+        dispatchData.lws[0] = sub_group_size;
+        dispatchData.lws[1] = 1;
+        dispatchData.lws[2] = 1;
+    }
+
+    printf("[%d] gws: (%zd, %zd, %zd), lws: (%zd, %zd, %zd), (%zd, %zd, %zd) %zd\n", 
+        (int)arg.resampleType, 
+        dispatchData.gws[0], dispatchData.gws[1], dispatchData.gws[2],
+        dispatchData.lws[0], dispatchData.lws[1], dispatchData.lws[2],
+        dispatchData.gws[0]/dispatchData.lws[0],
+        dispatchData.gws[1]/dispatchData.lws[1],
+        dispatchData.gws[2]/dispatchData.lws[2],
+        dispatchData.gws[0]/dispatchData.lws[0] *  dispatchData.gws[1]/dispatchData.lws[1] * dispatchData.gws[2]/dispatchData.lws[2]
+    );
 
     return dispatchData;
 }
@@ -94,6 +131,9 @@ bool ResampleKernelOpt::Validate(const Params& p, const optional_params& o) cons
 JitConstants ResampleKernelOpt::GetJitConstants(const resample_params &params) const {
     auto jit = Parent::GetJitConstants(params);
 
+    // if (params.resampleType == ResampleType::CAFFE_BILINEAR_INTERP) {
+    // }
+    
     jit.AddConstant(MakeJitConstant("OUTPUT_X_BLOCK_SIZE", GetOptimalBlockSize(params)));
     jit.AddConstant(MakeJitConstant("SUB_GROUP_SIZE", sub_group_size));
     jit.AddConstant(MakeJitConstant("X_BLOCKS", CeilDiv(params.output.X().v, GetOptimalBlockSize(params))));
@@ -101,7 +141,7 @@ JitConstants ResampleKernelOpt::GetJitConstants(const resample_params &params) c
     if (params.inputs[0].GetLayout() == DataLayout::fs_b_yx_fsv32) {
         vec_size = 2;
         jit.AddConstant(MakeJitConstant("FEATURE_SLICE_SIZE", 32));
-    } else {
+    } else { // DataLayout::b_fs_yx_fsv16
         vec_size = 1;
         jit.AddConstant(MakeJitConstant("FEATURE_SLICE_SIZE", 16));
     }

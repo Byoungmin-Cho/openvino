@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "include/common.cl"
-#include "include/data_types.cl"
 #include "include/include_all.cl"
 
 inline uint FUNC(get_input_index)(uint b, uint f, uint z, uint y, uint x)
@@ -383,11 +381,11 @@ KERNEL (resample_gpu_ref)(__global INPUT0_TYPE* input,
     const int batch = (int)get_global_id(2) % OUTPUT_BATCH_NUM;
     const int oz    = (int)get_global_id(2) / OUTPUT_BATCH_NUM;
 #endif
-    const int PADDED_B = in_size[0] + PADS_BEGIN[0] + PADS_END[0];
-    const int PADDED_F = in_size[1] + PADS_BEGIN[1] + PADS_END[1];
-    const int PADDED_Z = in_size[2] + PADS_BEGIN[2] + PADS_END[2];
-    const int PADDED_Y = in_size[3] + PADS_BEGIN[3] + PADS_END[3];
-    const int PADDED_X = in_size[4] + PADS_BEGIN[4] + PADS_END[4];
+    // const int PADDED_B = in_size[0] + PADS_BEGIN[0] + PADS_END[0];
+    // const int PADDED_F = in_size[1] + PADS_BEGIN[1] + PADS_END[1];
+    // const int PADDED_Z = in_size[2] + PADS_BEGIN[2] + PADS_END[2];
+    // const int PADDED_Y = in_size[3] + PADS_BEGIN[3] + PADS_END[3];
+    // const int PADDED_X = in_size[4] + PADS_BEGIN[4] + PADS_END[4];
 
     ACCUMULATOR_TYPE i_b = AXES_USED[0] ? FUNC_CALL(get_original_coordinate)(batch, SCALES[0], out_size[0], PADDED_B) : batch;
     ACCUMULATOR_TYPE i_f = AXES_USED[1] ? FUNC_CALL(get_original_coordinate)(feature, SCALES[1], out_size[1], PADDED_F) : feature;
@@ -446,9 +444,17 @@ KERNEL (resample_gpu_ref)(__global INPUT0_TYPE* input,
     ACCUMULATOR_TYPE wsum[fp_max] = {0};
 
     unroll_for(int b = b_init; b < b_max; b++) {
+        ACCUMULATOR_TYPE db = i_b - b;
+        ACCUMULATOR_TYPE wb = ab * TRIANGLE_COEFF(ab * db);
         unroll_for(int f = f_init; f < f_max; f++) {
+            ACCUMULATOR_TYPE df = i_f - f;
+            ACCUMULATOR_TYPE wf = af * TRIANGLE_COEFF(af * df);
             unroll_for(int z = z_init; z < z_max; z++) {
+                ACCUMULATOR_TYPE dz = i_z - z;
+                ACCUMULATOR_TYPE wz = az * TRIANGLE_COEFF(az * dz);
                 unroll_for(int y = y_init; y < y_max; y++) {
+                    ACCUMULATOR_TYPE dy = i_y - y;
+                    ACCUMULATOR_TYPE wy = ay * TRIANGLE_COEFF(ay * dy);
                     unroll_for(int x = x_init; x < x_max; x++) {
                         unroll_for(int fp = 0; fp < fp_max; fp++) {
 #if PADDING_USED == 1
@@ -457,24 +463,27 @@ KERNEL (resample_gpu_ref)(__global INPUT0_TYPE* input,
                                                  y >= in_size[3] || x >= in_size[4];
 #endif
 
-                            ACCUMULATOR_TYPE db = i_b - b;
-                            ACCUMULATOR_TYPE df = i_f - f;
+                            // ACCUMULATOR_TYPE db = i_b - b;
+                            // ACCUMULATOR_TYPE df = i_f - f;
                             ACCUMULATOR_TYPE dx = i_x - x;
-                            ACCUMULATOR_TYPE dy = i_y - y;
-                            ACCUMULATOR_TYPE dz = i_z - z;
-#if ANTIALIAS == 1
-                            ACCUMULATOR_TYPE w = ab * TRIANGLE_COEFF(ab * db) *
-                                                 af * TRIANGLE_COEFF(af * df) *
-                                                 ax * TRIANGLE_COEFF(ax * dx) *
-                                                 ay * TRIANGLE_COEFF(ay * dy) *
-                                                 az * TRIANGLE_COEFF(az * dz);
-#else
-                            ACCUMULATOR_TYPE w = TRIANGLE_COEFF(db) *
-                                                 TRIANGLE_COEFF(df) *
-                                                 TRIANGLE_COEFF(dx) *
-                                                 TRIANGLE_COEFF(dy) *
-                                                 TRIANGLE_COEFF(dz);
-#endif
+                            // ACCUMULATOR_TYPE dy = i_y - y;
+                            // ACCUMULATOR_TYPE dz = i_z - z;
+
+                            ACCUMULATOR_TYPE wx = ax * TRIANGLE_COEFF(ax * dx);
+// #if ANTIALIAS == 1
+//                             ACCUMULATOR_TYPE w = ab * TRIANGLE_COEFF(ab * db) *
+//                                                  af * TRIANGLE_COEFF(af * df) *
+//                                                  ax * TRIANGLE_COEFF(ax * dx) *
+//                                                  ay * TRIANGLE_COEFF(ay * dy) *
+//                                                  az * TRIANGLE_COEFF(az * dz);
+// #else
+//                             ACCUMULATOR_TYPE w = TRIANGLE_COEFF(db) *
+//                                                  TRIANGLE_COEFF(df) *
+//                                                  TRIANGLE_COEFF(dx) *
+//                                                  TRIANGLE_COEFF(dy) *
+//                                                  TRIANGLE_COEFF(dz);
+// #endif
+                            ACCUMULATOR_TYPE w = wb * wf * wz * wy * wx;
                             if (w != 0 && f + fp < INPUT0_FEATURE_NUM) {
                                 wsum[fp] += w;
 #if PADDING_USED == 1
